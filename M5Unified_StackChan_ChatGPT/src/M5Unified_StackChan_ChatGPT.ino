@@ -985,7 +985,7 @@ void setup()
   DynamicJsonDocument wifiJson(10 * 1024);
   /// settings
   if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
-    /// wifi
+    /// wifi setting get
     auto fs = SD.open("/wifi.json", FILE_READ);
     if(fs) {
       DeserializationError error = deserializeJson(wifiJson, fs);
