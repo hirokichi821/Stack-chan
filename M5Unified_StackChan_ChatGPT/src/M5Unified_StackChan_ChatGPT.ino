@@ -850,19 +850,54 @@ struct box_t
 };
 static box_t box_servo;
 
-void Wifi_setup() {
-  // 前回接続時情報で接続する
-  while (WiFi.status() != WL_CONNECTED) {
-    M5.Display.print(".");
-    Serial.print(".");
-    delay(500);
-    // 10秒以上接続できなかったら抜ける
-    if ( 10000 < millis() ) {
-      break;
+void Wifi_setup(bool isReadWifiInfo, DynamicJsonDocument& wifiJson) {
+  if (!isReadWifiInfo)
+  {
+    WiFi.begin();
+    // 前回接続時情報で接続する
+    while (WiFi.status() != WL_CONNECTED) {
+      M5.Display.print(".");
+      Serial.print(".");
+      delay(500);
+      // 10秒以上接続できなかったら抜ける
+      if ( 10000 < millis() ) {
+        break;
+      }
+    }
+  }
+  else
+  {
+    JsonArray jsonArray = wifiJson["accesspoint"];
+    int timeOut = wifiJson["timeout"];
+    for (int index = 0; index < jsonArray.size(); ++index)
+    {
+      JsonObject object = jsonArray[index];
+      String ssid = object["ssid"];
+      String passWord = object["pasword"];
+      M5.Lcd.print("\nConnecting ");
+      M5.Lcd.print(ssid);
+      WiFi.begin(ssid.c_str(), passWord.c_str());
+      int loopCount = 0;
+      while (WiFi.status() != WL_CONNECTED)
+      {
+        M5.Display.print(".");
+        Serial.print(".");
+        delay(500);
+        // 設定されたタイムアウト秒接続できなかったら抜ける
+        if (loopCount++ > timeOut * 2)
+        {
+          break;
+        }
+      }
+      if (WiFi.status() == WL_CONNECTED)
+      {
+        break;
+      }
     }
   }
   M5.Display.println("");
   Serial.println("");
+  int loopCount = 0;
   // 未接続の場合にはSmartConfig待受
   if ( WiFi.status() != WL_CONNECTED ) {
     WiFi.mode(WIFI_STA);
@@ -874,7 +909,7 @@ void Wifi_setup() {
       M5.Display.print("#");
       Serial.print("#");
       // 30秒以上接続できなかったら抜ける
-      if ( 30000 < millis() ) {
+      if (loopCount++ > 30 * 2) {
         Serial.println("");
         Serial.println("Reset");
         ESP.restart();
@@ -890,7 +925,7 @@ void Wifi_setup() {
       M5.Display.print(".");
       Serial.print(".");
       // 60秒以上接続できなかったら抜ける
-      if ( 60000 < millis() ) {
+      if (loopCount++ > 60 * 2) {
         Serial.println("");
         Serial.println("Reset");
         ESP.restart();
@@ -946,27 +981,22 @@ void setup()
   OPENAI_API_KEY = String(OPENAI_APIKEY);
   tts_user = String(VOICETEXT_APIKEY);
 #else
+  bool isReadWifiInfo = true;
+  DynamicJsonDocument wifiJson(10 * 1024);
   /// settings
   if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
     /// wifi
-    auto fs = SD.open("/wifi.txt", FILE_READ);
+    auto fs = SD.open("/wifi.json", FILE_READ);
     if(fs) {
-      size_t sz = fs.size();
-      char buf[sz + 1];
-      fs.read((uint8_t*)buf, sz);
-      buf[sz] = 0;
-      fs.close();
-
-      int y = 0;
-      for(int x = 0; x < sz; x++) {
-        if(buf[x] == 0x0a || buf[x] == 0x0d)
-          buf[x] = 0;
-        else if (!y && x > 0 && !buf[x - 1] && buf[x])
-          y = x;
+      DeserializationError error = deserializeJson(wifiJson, fs);
+      if (error)
+      {
+        M5.Lcd.print("json deserialize error.\n");
+        Serial.println("DeserializationError");
+        isReadWifiInfo = false;
       }
-      WiFi.begin(buf, &buf[y]);
     } else {
-       WiFi.begin();
+      isReadWifiInfo = false;
     }
 
     uint32_t nvs_handle;
@@ -998,7 +1028,7 @@ void setup()
     }
     SD.end();
   } else {
-    WiFi.begin();
+    isReadWifiInfo = false;
   }
 
   {
@@ -1045,7 +1075,7 @@ void setup()
   }
 
   M5.Lcd.print("Connecting");
-  Wifi_setup();
+  Wifi_setup(isReadWifiInfo, wifiJson);
   M5.Lcd.println("\nConnected");
   Serial.printf_P(PSTR("Go to http://"));
   M5.Lcd.print("Go to http://");
