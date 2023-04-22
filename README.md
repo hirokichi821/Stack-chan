@@ -6,6 +6,8 @@ https://github.com/robo8080/M5Unified_StackChan_ChatGPT.git
 
 SDカードの直下に下記のフォーマットでwifi.jsonを作成します。
 
+上の方から順番に接続を試していきます。
+
 ```json
 {
   "timeout": 10,
